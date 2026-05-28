@@ -1,0 +1,71 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #bfbfbf;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+}
+
+#cards-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.uno-card {
+  border-radius: 16px;
+  border: 7px solid #d8d8d8;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
+}
+
+.card-frame {
+  position: absolute;
+  inset: 5px;
+  border-radius: 10px;
+  border: 2.5px solid rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.card-oval {
+  position: absolute;
+  top: -7px;
+  left: -7px;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.card-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+.card-corner {
+  position: absolute;
+  z-index: 3;
+}
+
+.card-corner--tl {
+  top: 8px;
+  left: 8px;
+}
+
+.card-corner--br {
+  bottom: 8px;
+  right: 8px;
+  transform: rotate(180deg);
+}

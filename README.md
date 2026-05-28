@@ -1,0 +1,39 @@
+# Bluff UNO Table
+
+A no-dependency multiplayer Bluff website using one UNO deck.
+
+## Run
+
+```sh
+python3 server.py
+```
+
+Then open:
+
+```text
+http://localhost:3000
+```
+
+Every player joins with a name. A joining player enters the room code first, then chooses the display name shown in the lobby, table order, move log, and turn banner. Any player in the lobby can start the game once at least two players are present. Share the room link or room code with other players before starting.
+
+## Rules Implemented
+
+- One standard UNO deck is shuffled.
+- `0` and `Skip` cards keep different faces, but share one bluff rank: `0/Skip`.
+- Cards are dealt equally to all players.
+- Leftover cards are put away silently.
+- Whoever presses Start plays first; the remaining players are shuffled randomly after that player to create the fixed table order.
+- The room creator can close the room before the game ends; closing broadcasts the room closure to every player and stops further actions.
+- Players can leave before the game ends. If the room creator leaves, host control passes to the earliest still-present player who joined after them.
+- If a player who has not ranked yet leaves during the game, their hand is shuffled and dealt equally to remaining unranked players; leftover cards are put away silently.
+- If a leave leaves only one active player in the game, the game finishes immediately and the remaining player is ranked.
+- If a ranked player leaves, rankings and gameplay are unchanged. That player may rejoin the running game only with the exact same display name.
+- The first play into an empty center pile declares the active rank. Later players may play any physical cards as a bluff, but must keep declaring that same active rank until the pile is cleared by a bluff call or final pass.
+- On a turn, a player may play selected cards, pass, or use final pass when eligible.
+- Any player except the last player who played cards may call bluff while a last play exists, even after later passes.
+- If the call is correct, the bluffing player takes the center pile and the next turn starts from the challenger.
+- If the call is wrong, the challenger takes the center pile and the next turn starts from the challenged player.
+- Final pass is normally offered to the last player who played cards when everyone else has passed back to them. If that last player has emptied their hand and is waiting to be ranked, final pass is offered to the next active player instead.
+- Other players' card totals are shown only as rough stack graphics, not exact counts.
+- A live rankings list shows who finished first, second, and so on as players empty their hands.
+- If a player's final cards are still challengeable, that player is skipped for turns but is not ranked yet. The finish is confirmed after a wrong bluff call, after another player makes the next play, or when the next active player uses final pass after everyone else has passed.
