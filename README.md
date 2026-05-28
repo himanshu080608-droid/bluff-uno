@@ -1,8 +1,16 @@
 # Bluff UNO Table
 
-A no-dependency multiplayer Bluff website using one UNO deck.
+A multiplayer Bluff website using one UNO deck, served by FastAPI with WebSocket room updates.
 
 ## Run
+
+Install the server dependencies once:
+
+```sh
+python3 -m pip install -r requirements-fastapi.txt
+```
+
+Start the server:
 
 ```sh
 python3 server.py

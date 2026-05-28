@@ -9,6 +9,8 @@ let state = null;
 let events = null;
 let statePollTimer = null;
 let stateRefreshInFlight = false;
+let realtimeConnected = false;
+let realtimeRetryTimer = null;
 let selected = new Set();
 let errorText = "";
 let actionSplashQueue = [];
@@ -28,7 +30,9 @@ const ACTION_SPLASH_EXTRA_HOLD_MS = 450;
 const RECEIVED_PILE_HIGHLIGHT_MS = 3600;
 const RECEIVED_PILE_AFTER_REVEAL_GAP_MS = 180;
 const BLUFF_WINDOW_RENDER_PAD_MS = 40;
-const STATE_POLL_MS = 700;
+const STATE_POLL_MS = 2500;
+const REALTIME_RETRY_MS = 1200;
+const USE_WEB_SOCKET = true;
 const USE_EVENT_STREAM = false;
 
 const REVERSE_ARROW_PATH =
@@ -571,6 +575,10 @@ function isInterruptibleSplash(action) {
 }
 
 function connectEvents() {
+  if (USE_WEB_SOCKET) {
+    connectWebSocket();
+    return;
+  }
   if (!USE_EVENT_STREAM) return;
   if (!session || events) return;
   events = new EventSource(`/events?code=${encodeURIComponent(session.code)}&playerId=${encodeURIComponent(session.playerId)}`);
@@ -583,13 +591,56 @@ function connectEvents() {
   };
 }
 
+function connectWebSocket() {
+  if (!session || events) return;
+  if (realtimeRetryTimer) {
+    window.clearTimeout(realtimeRetryTimer);
+    realtimeRetryTimer = null;
+  }
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const url = `${protocol}//${window.location.host}/ws?code=${encodeURIComponent(session.code)}&playerId=${encodeURIComponent(session.playerId)}`;
+  events = new WebSocket(url);
+
+  events.addEventListener("open", () => {
+    realtimeConnected = true;
+    errorText = "";
+  });
+
+  events.addEventListener("message", (event) => {
+    try {
+      const message = JSON.parse(event.data);
+      if (message.type === "state" && message.room) {
+        applyRoomState(message.room);
+      } else if (message.type === "error" && message.error) {
+        setError(message.error);
+      }
+    } catch {
+    }
+  });
+
+  events.addEventListener("close", scheduleRealtimeReconnect);
+  events.addEventListener("error", () => {
+    if (events) events.close();
+  });
+}
+
+function scheduleRealtimeReconnect() {
+  realtimeConnected = false;
+  events = null;
+  if (!session || realtimeRetryTimer) return;
+  realtimeRetryTimer = window.setTimeout(() => {
+    realtimeRetryTimer = null;
+    connectEvents();
+  }, REALTIME_RETRY_MS);
+}
+
 function startStatePolling() {
   if (statePollTimer || !session) return;
   statePollTimer = window.setInterval(refreshState, STATE_POLL_MS);
 }
 
-async function refreshState() {
-  if (!session || stateRefreshInFlight) return;
+async function refreshState(force = false) {
+  if (!session || stateRefreshInFlight || (realtimeConnected && !force)) return;
   stateRefreshInFlight = true;
   try {
     const response = await fetch("/api/state", {
@@ -608,9 +659,9 @@ async function refreshState() {
   }
 }
 
-window.addEventListener("focus", refreshState);
+window.addEventListener("focus", () => refreshState(true));
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") refreshState();
+  if (document.visibilityState === "visible") refreshState(true);
 });
 
 function setError(message) {
@@ -1207,6 +1258,11 @@ function clearLocalSession(code) {
     window.clearInterval(statePollTimer);
     statePollTimer = null;
   }
+  if (realtimeRetryTimer) {
+    window.clearTimeout(realtimeRetryTimer);
+    realtimeRetryTimer = null;
+  }
+  realtimeConnected = false;
   stateRefreshInFlight = false;
   removeStoredSession(code);
   session = null;
