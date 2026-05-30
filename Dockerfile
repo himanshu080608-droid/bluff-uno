@@ -3,6 +3,7 @@ FROM python:3.11-slim
 
 # Set the working directory inside the container
 WORKDIR /app
+ENV PYTHONUNBUFFERED=1
 
 # 1. Copy only requirements first (for better caching)
 COPY requirements.txt .
@@ -15,6 +16,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # 4. Run the server
-# We explicitly tell it to run server:app on port 8000
-# This overrides any internal uvicorn.run() logic
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "exec uvicorn server:app --host 0.0.0.0 --port ${PORT:-8000} --ws-ping-interval 30 --ws-ping-timeout 30"]

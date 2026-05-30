@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import time
+import urllib.request
 from pathlib import Path
 
 from fastapi import Body, FastAPI, Query, WebSocket, WebSocketDisconnect
@@ -13,12 +14,57 @@ import game_logic as game
 
 
 PORT = int(os.environ.get("PORT", "3000"))
+KEEPALIVE_URL = os.environ.get("KEEPALIVE_URL", "").strip()
 ROOT = Path(__file__).resolve().parent
 PUBLIC_DIR = ROOT / "public"
 
 app = FastAPI()
 socket_lock = asyncio.Lock()
 room_sockets: dict[str, list[dict]] = {}
+keepalive_task: asyncio.Task | None = None
+
+
+def keepalive_interval_seconds() -> int:
+    try:
+        interval = int(os.environ.get("KEEPALIVE_INTERVAL_SECONDS", "600"))
+    except ValueError:
+        interval = 600
+    return max(60, interval)
+
+
+def ping_keepalive_url() -> None:
+    request = urllib.request.Request(
+        KEEPALIVE_URL,
+        headers={
+            "Cache-Control": "no-cache",
+            "User-Agent": "bluff-uno-keepalive/1.0",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=10):
+        pass
+
+
+async def keepalive_loop() -> None:
+    interval = keepalive_interval_seconds()
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await asyncio.to_thread(ping_keepalive_url)
+        except Exception as error:
+            print(f"Keepalive ping failed: {error}", flush=True)
+
+
+@app.on_event("startup")
+async def start_keepalive() -> None:
+    global keepalive_task
+    if KEEPALIVE_URL:
+        keepalive_task = asyncio.create_task(keepalive_loop())
+
+
+@app.on_event("shutdown")
+async def stop_keepalive() -> None:
+    if keepalive_task:
+        keepalive_task.cancel()
 
 
 def api_error(error: Exception) -> JSONResponse:

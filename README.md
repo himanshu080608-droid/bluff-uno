@@ -22,6 +22,19 @@ Then open:
 http://localhost:3000
 ```
 
+## Deployment
+
+The app exposes `GET /health` for platform health checks. When deployed behind Docker, Uvicorn is started with WebSocket ping/pong enabled.
+
+Optional keepalive environment variables:
+
+```text
+KEEPALIVE_URL=https://your-app-url.example/health
+KEEPALIVE_INTERVAL_SECONDS=600
+```
+
+`KEEPALIVE_URL` is useful on platforms that sleep containers after inactivity. It can keep an already-running container warm by making a public `/health` request every interval. If the platform has already put the container to sleep, an outside visitor or external uptime monitor still has to wake it.
+
 Every player joins with a name. A joining player enters the room code first, then chooses the display name shown in the lobby, table order, move log, and turn banner. Any player in the lobby can start the game once at least two players are present. Share the room link or room code with other players before starting.
 
 ## Rules Implemented

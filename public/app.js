@@ -12,6 +12,7 @@ let stateRefreshInFlight = false;
 let realtimeConnected = false;
 let realtimeRetryTimer = null;
 let realtimeHeartbeatTimer = null;
+let pageKeepaliveTimer = null;
 let selected = new Set();
 let errorText = "";
 let actionSplashQueue = [];
@@ -34,6 +35,7 @@ const BLUFF_WINDOW_RENDER_PAD_MS = 40;
 const STATE_POLL_MS = 2500;
 const REALTIME_RETRY_MS = 1200;
 const REALTIME_HEARTBEAT_MS = 60000;
+const PAGE_KEEPALIVE_MS = 60000;
 const USE_WEB_SOCKET = true;
 const USE_EVENT_STREAM = false;
 
@@ -643,6 +645,22 @@ function stopRealtimeHeartbeat() {
   if (!realtimeHeartbeatTimer) return;
   window.clearInterval(realtimeHeartbeatTimer);
   realtimeHeartbeatTimer = null;
+}
+
+function startPageKeepalive() {
+  if (pageKeepaliveTimer) return;
+  sendPageKeepalive();
+  pageKeepaliveTimer = window.setInterval(sendPageKeepalive, PAGE_KEEPALIVE_MS);
+}
+
+function sendPageKeepalive() {
+  fetch("/health", {
+    method: "GET",
+    cache: "no-store",
+    headers: { "Cache-Control": "no-cache" }
+  }).catch(() => {
+    // A missed keepalive should not interrupt gameplay or the entry screen.
+  });
 }
 
 function scheduleRealtimeReconnect() {
@@ -1349,4 +1367,5 @@ async function boot() {
   render();
 }
 
+startPageKeepalive();
 boot();
