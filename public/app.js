@@ -382,6 +382,10 @@ function canUseTurnActions() {
   return Boolean(state && state.canAct && !isBluffWindowActive());
 }
 
+function canUsePassAction() {
+  return Boolean(state && state.canAct && (!isBluffWindowActive() || !state.canFinalPass));
+}
+
 function scheduleBluffWindowRender() {
   if (bluffWindowTimer) {
     window.clearTimeout(bluffWindowTimer);
@@ -1056,6 +1060,7 @@ function renderControls() {
   const bluffWindowSeconds = Math.max(1, Math.ceil(bluffWindowRemainingMs() / 1000));
   const passAction = state.canFinalPass ? "final-pass" : "pass";
   const passLabel = state.canFinalPass ? "Final pass" : "Pass";
+  const canPass = canUsePassAction();
   return `
     <div class="controls">
       <label class="input-row">
@@ -1068,10 +1073,10 @@ function renderControls() {
       <div class="selected-count">${selected.size} selected</div>
       <button id="play" class="primary" type="button" disabled>Play selected</button>
       <button id="challenge" class="danger" type="button" ${state.canChallenge ? "" : "disabled"}>Call bluff</button>
-      <button id="pass" class="secondary" type="button" data-action="${passAction}" ${isTurn ? "" : "disabled"}>${passLabel}</button>
+      <button id="pass" class="secondary" type="button" data-action="${passAction}" ${canPass ? "" : "disabled"}>${passLabel}</button>
       ${
         bluffWindowActive
-          ? `<div class="reaction-status">Bluff calls are open for ${bluffWindowSeconds}s. Play and pass unlock after this window.</div>`
+          ? `<div class="reaction-status">Bluff calls are open for ${bluffWindowSeconds}s. The current player may pass, but play unlocks after this window.</div>`
           : ""
       }
     </div>
@@ -1117,12 +1122,9 @@ function restoreGameScrollPositions(positions) {
 function renderGame() {
   const splashAction = activeSplashAction;
   const scrollPositions = captureGameScrollPositions();
-  const bluffWindowActive = isBluffWindowActive();
   const title =
     state.status === "finished"
       ? "Game finished"
-      : bluffWindowActive
-        ? "Bluff calls open"
       : state.currentPlayerName
         ? `${state.currentPlayerName}'s turn`
         : "Waiting";

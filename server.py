@@ -99,19 +99,20 @@ def handle_action(body: dict) -> tuple[dict, str]:
     if player["id"] in room["winners"]:
         raise ValueError("You are already out of cards.")
 
-    if body.get("type") == "challenge":
+    action_type = body.get("type")
+    if action_type == "challenge":
         game.challenge(room, player)
     else:
-        if game.bluff_window_active(room):
+        if game.bluff_window_active(room) and action_type != "pass":
             raise ValueError("Wait for the bluff-call window to finish.")
         current = game.current_player(room)
         if not current or current["id"] != player["id"]:
             raise ValueError("It is not your turn.")
-        if body.get("type") == "play":
+        if action_type == "play":
             game.play_cards(room, player, body.get("cardIds") or [], body.get("claimedRank"))
-        elif body.get("type") == "pass":
+        elif action_type == "pass":
             game.pass_turn(room, player)
-        elif body.get("type") == "final-pass":
+        elif action_type == "final-pass":
             game.final_pass(room, player)
         else:
             raise ValueError("Unknown action.")
