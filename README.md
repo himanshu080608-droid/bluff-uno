@@ -7,7 +7,7 @@ A multiplayer Bluff website using one UNO deck, served by FastAPI with WebSocket
 Install the server dependencies once:
 
 ```sh
-python3 -m pip install -r requirements-fastapi.txt
+python3 -m pip install -r requirements.txt
 ```
 
 Start the server:
