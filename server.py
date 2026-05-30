@@ -43,6 +43,11 @@ broadcast_queue: queue.Queue[str] = queue.Queue()
 rng = random.SystemRandom()
 
 
+def shuffle_many(items: list) -> None:
+    for _ in range(3):
+        rng.shuffle(items)
+
+
 def now_ms() -> int:
     return int(time.time() * 1000)
 
@@ -107,7 +112,7 @@ def make_uno_deck() -> list[dict]:
         for _ in range(4):
             cards.append(make_card(serial, "wild", rank, deck))
             serial += 1
-    rng.shuffle(cards)
+    shuffle_many(cards)
     return cards
 
 
@@ -447,8 +452,12 @@ def deal(room: dict) -> None:
     players = present_players(room)
     per_player = len(deck) // len(players)
     for player in players:
-        player["hand"] = sort_hand(deck[:per_player])
-        del deck[:per_player]
+        player["hand"] = []
+    for _ in range(per_player):
+        for player in players:
+            player["hand"].append(deck.pop())
+    for player in players:
+        sort_hand(player["hand"])
     room["burnedPile"] = deck
     room["centerPile"] = []
     room["activeRank"] = None
@@ -466,7 +475,7 @@ def start_game(room: dict, player_id: str) -> None:
     deal(room)
     starter = player_by_id(room, player_id)
     remaining = [player for player in present_players(room) if player["id"] != player_id]
-    rng.shuffle(remaining)
+    shuffle_many(remaining)
     ordered = [starter] + remaining
     room["order"] = [player["id"] for player in ordered]
     room["currentIndex"] = 0
@@ -514,7 +523,7 @@ def assign_host_after_leave(room: dict, leaving_player: dict) -> None:
 def redistribute_departing_hand(room: dict, player: dict) -> int:
     cards = player["hand"][:]
     player["hand"] = []
-    rng.shuffle(cards)
+    shuffle_many(cards)
     receivers = [item for item in present_players(room) if item["id"] != player["id"] and item["id"] not in room["winners"]]
     if not receivers:
         room["burnedPile"].extend(cards)
@@ -861,19 +870,20 @@ class BluffHandler(SimpleHTTPRequestHandler):
             if player["id"] in room["winners"]:
                 raise ValueError("You are already out of cards.")
 
-            if body.get("type") == "challenge":
+            action_type = body.get("type")
+            if action_type == "challenge":
                 challenge(room, player)
             else:
-                if bluff_window_active(room):
+                if bluff_window_active(room) and action_type != "pass":
                     raise ValueError("Wait for the bluff-call window to finish.")
                 current = current_player(room)
                 if not current or current["id"] != player["id"]:
                     raise ValueError("It is not your turn.")
-                if body.get("type") == "play":
+                if action_type == "play":
                     play_cards(room, player, body.get("cardIds") or [], body.get("claimedRank"))
-                elif body.get("type") == "pass":
+                elif action_type == "pass":
                     pass_turn(room, player)
-                elif body.get("type") == "final-pass":
+                elif action_type == "final-pass":
                     final_pass(room, player)
                 else:
                     raise ValueError("Unknown action.")
