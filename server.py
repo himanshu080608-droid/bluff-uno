@@ -8,7 +8,7 @@ import urllib.request
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Body, FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 
 import game_logic as game
@@ -18,6 +18,7 @@ PORT = int(os.environ.get("PORT", "8000"))
 KEEPALIVE_URL = os.environ.get("KEEPALIVE_URL", "").strip()
 ROOT = Path(__file__).resolve().parent
 PUBLIC_DIR = ROOT / "public"
+learned_keepalive_url = ""
 
 
 def keepalive_interval_seconds() -> int:
@@ -28,9 +29,28 @@ def keepalive_interval_seconds() -> int:
     return max(60, interval)
 
 
+def active_keepalive_url() -> str:
+    return KEEPALIVE_URL or learned_keepalive_url
+
+
+def remember_keepalive_url(request: Request) -> None:
+    global learned_keepalive_url
+    if KEEPALIVE_URL or learned_keepalive_url:
+        return
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    if not host:
+        return
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+    learned_keepalive_url = f"{proto}://{host}/health"
+    print(f"Keepalive URL learned: {learned_keepalive_url}", flush=True)
+
+
 def ping_keepalive_url() -> None:
+    url = active_keepalive_url()
+    if not url:
+        return
     request = urllib.request.Request(
-        KEEPALIVE_URL,
+        url,
         headers={
             "Cache-Control": "no-cache",
             "User-Agent": "bluff-uno-keepalive/1.0",
@@ -52,9 +72,7 @@ async def keepalive_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    keepalive_task: asyncio.Task | None = None
-    if KEEPALIVE_URL:
-        keepalive_task = asyncio.create_task(keepalive_loop())
+    keepalive_task = asyncio.create_task(keepalive_loop())
     try:
         yield
     finally:
@@ -69,6 +87,12 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 socket_lock = asyncio.Lock()
 room_sockets: dict[str, list[dict]] = {}
+
+
+@app.middleware("http")
+async def learn_keepalive_url(request: Request, call_next):
+    remember_keepalive_url(request)
+    return await call_next(request)
 
 
 def api_error(error: Exception) -> JSONResponse:

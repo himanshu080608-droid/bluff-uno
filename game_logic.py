@@ -5,7 +5,7 @@ import secrets
 import threading
 import time
 
-BLUFF_REACTION_MS = 10000
+BLUFF_CALL_WINDOW_MS = 6000
 
 UNO_RANKS = [
     "0/Skip",
@@ -350,7 +350,7 @@ def sanitize_room(room: dict, viewer_id: str | None) -> dict:
         "centerPile": {"count": len(room["centerPile"]), "lastPlay": last_play},
         "bluffWindow": {
             "until": bluff_until,
-            "durationMs": BLUFF_REACTION_MS,
+            "durationMs": BLUFF_CALL_WINDOW_MS,
             "active": bluff_active,
             "lastPlayerName": player_name(room, room["lastPlay"]["playerId"]) if room.get("lastPlay") else None,
         },
@@ -577,7 +577,7 @@ def play_cards(room: dict, player: dict, card_ids: list[str], claimed_rank: str)
     if not active_rank:
         room["activeRank"] = claimed_rank
     room["passedSinceLastPlay"] = []
-    room["bluffWindowUntil"] = now_ms() + BLUFF_REACTION_MS
+    room["bluffWindowUntil"] = now_ms() + BLUFF_CALL_WINDOW_MS
     card_word = "card" if len(played) == 1 else "cards"
     add_log(
         room,
