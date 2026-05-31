@@ -363,7 +363,11 @@ async def static_file(path: str):
     return FileResponse(PUBLIC_DIR / "index.html")
 
 
-if __name__ == "__main__":
+def run_local_server() -> None:
     import uvicorn
 
     uvicorn.run("server:app", host="0.0.0.0", port=PORT, reload=False, ws_ping_interval=45, ws_ping_timeout=120)
+
+
+if __name__ == "__main__":
+    run_local_server()
