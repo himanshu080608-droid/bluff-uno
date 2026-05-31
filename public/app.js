@@ -34,7 +34,7 @@ const RECEIVED_PILE_AFTER_REVEAL_GAP_MS = 180;
 const BLUFF_WINDOW_RENDER_PAD_MS = 40;
 const STATE_POLL_MS = 2500;
 const REALTIME_RETRY_MS = 1200;
-const REALTIME_HEARTBEAT_MS = 60000;
+const REALTIME_HEARTBEAT_MS = 25000;
 const PAGE_KEEPALIVE_MS = 60000;
 const USE_WEB_SOCKET = true;
 const USE_EVENT_STREAM = false;
@@ -613,6 +613,7 @@ function connectWebSocket() {
     realtimeConnected = true;
     errorText = "";
     startRealtimeHeartbeat();
+    sendRealtimeHeartbeat();
   });
 
   events.addEventListener("message", (event) => {
@@ -635,10 +636,12 @@ function connectWebSocket() {
 
 function startRealtimeHeartbeat() {
   stopRealtimeHeartbeat();
-  realtimeHeartbeatTimer = window.setInterval(() => {
-    if (!events || events.readyState !== WebSocket.OPEN) return;
-    events.send(JSON.stringify({ type: "ping", at: Date.now() }));
-  }, REALTIME_HEARTBEAT_MS);
+  realtimeHeartbeatTimer = window.setInterval(sendRealtimeHeartbeat, REALTIME_HEARTBEAT_MS);
+}
+
+function sendRealtimeHeartbeat() {
+  if (!events || events.readyState !== WebSocket.OPEN) return;
+  events.send(JSON.stringify({ type: "ping", at: Date.now() }));
 }
 
 function stopRealtimeHeartbeat() {

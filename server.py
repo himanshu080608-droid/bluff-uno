@@ -5,6 +5,7 @@ import json
 import os
 import time
 import urllib.request
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Body, FastAPI, Query, WebSocket, WebSocketDisconnect
@@ -13,15 +14,10 @@ from fastapi.responses import FileResponse, JSONResponse
 import game_logic as game
 
 
-PORT = int(os.environ.get("PORT", "3000"))
+PORT = int(os.environ.get("PORT", "8000"))
 KEEPALIVE_URL = os.environ.get("KEEPALIVE_URL", "").strip()
 ROOT = Path(__file__).resolve().parent
 PUBLIC_DIR = ROOT / "public"
-
-app = FastAPI()
-socket_lock = asyncio.Lock()
-room_sockets: dict[str, list[dict]] = {}
-keepalive_task: asyncio.Task | None = None
 
 
 def keepalive_interval_seconds() -> int:
@@ -54,17 +50,25 @@ async def keepalive_loop() -> None:
             print(f"Keepalive ping failed: {error}", flush=True)
 
 
-@app.on_event("startup")
-async def start_keepalive() -> None:
-    global keepalive_task
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    keepalive_task: asyncio.Task | None = None
     if KEEPALIVE_URL:
         keepalive_task = asyncio.create_task(keepalive_loop())
+    try:
+        yield
+    finally:
+        if keepalive_task:
+            keepalive_task.cancel()
+            try:
+                await keepalive_task
+            except asyncio.CancelledError:
+                pass
 
 
-@app.on_event("shutdown")
-async def stop_keepalive() -> None:
-    if keepalive_task:
-        keepalive_task.cancel()
+app = FastAPI(lifespan=lifespan)
+socket_lock = asyncio.Lock()
+room_sockets: dict[str, list[dict]] = {}
 
 
 def api_error(error: Exception) -> JSONResponse:
@@ -338,4 +342,4 @@ async def static_file(path: str):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("server:app", host="0.0.0.0", port=PORT, reload=False, ws_ping_interval=30, ws_ping_timeout=30)
+    uvicorn.run("server:app", host="0.0.0.0", port=PORT, reload=False, ws_ping_interval=45, ws_ping_timeout=120)
