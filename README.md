@@ -24,9 +24,15 @@ http://localhost:8000
 
 ## Deployment
 
-The app includes a tracked `fly.toml` deployment config. The Python server reads the host-provided `PORT` environment variable automatically and starts Uvicorn with WebSocket ping/pong enabled.
+Deployment-specific files such as `Dockerfile`, `.dockerignore`, and `fly.toml` are kept local and ignored by Git. The committed app is platform-neutral: deploy it to a Python host that supports long-running processes and WebSockets.
 
-Keep the app on one running instance unless room state is moved out of process memory.
+Use a start command equivalent to:
+
+```sh
+python3 server.py
+```
+
+The Python server reads the host-provided `PORT` environment variable automatically and starts Uvicorn with WebSocket ping/pong enabled. Keep the app on one running instance unless room state is moved out of process memory.
 
 The app exposes `GET /health` for platform health checks. Browser tabs also call `/health` every 60 seconds while the page is open.
 
