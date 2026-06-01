@@ -26,8 +26,22 @@ REDIS_URL = os.environ.get("REDIS_URL", "").strip()
 REDIS_ROOM_KEY_PREFIX = os.environ.get("REDIS_ROOM_KEY_PREFIX", "bluff:room:")
 REDIS_ROOM_TTL_SECONDS = int(os.environ.get("REDIS_ROOM_TTL_SECONDS", "7200"))
 origins_env = os.environ.get("CORS_ALLOW_ORIGINS", "")
-CORS_ALLOW_ORIGINS = [origin.strip() for origin in origins_env.split(",") if origin.strip()]
-DEFAULT_CORS_ALLOW_ORIGINS = ["https://bluff-uno.netlify.app"]
+
+
+def normalize_cors_origin(origin: str) -> str:
+    origin = origin.strip()
+    parsed = urlparse(origin)
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return origin.rstrip("/")
+
+
+CORS_ALLOW_ORIGINS = [
+    normalize_cors_origin(origin)
+    for origin in origins_env.split(",")
+    if origin.strip()
+]
+DEFAULT_CORS_ALLOW_ORIGINS = [normalize_cors_origin("https://bluff-uno.netlify.app")]
 browser_keepalive_url = ""
 learned_keepalive_url = ""
 KEEPALIVE_MIN_INTERVAL_SECONDS = 30
