@@ -272,7 +272,12 @@ function saveSession(room) {
 
 function recoveryNoticeMarkup() {
   if (!session || !session.recoveryCode) return "";
-  return `<div class="notice recovery-notice">Recovery code: <strong>${escapeHtml(session.recoveryCode)}</strong></div>`;
+  return `
+    <div class="recovery-chip" title="Recovery code">
+      <span>Recovery</span>
+      <strong>${escapeHtml(session.recoveryCode)}</strong>
+    </div>
+  `;
 }
 
 function colorValue(color) {
@@ -993,6 +998,7 @@ function renderEntry() {
 }
 
 function renderLobby() {
+  const recoveryCode = recoveryNoticeMarkup();
   const players = state.players
     .map(
       (player) => `
@@ -1015,7 +1021,7 @@ function renderLobby() {
           <button id="leaveRoom" class="secondary" type="button" ${state.canLeave ? "" : "disabled"}>Leave Room</button>
           ${state.you && state.you.host ? `<button id="closeRoom" class="danger" type="button" ${state.canClose ? "" : "disabled"}>Close Room</button>` : ""}
         </div>
-        ${recoveryNoticeMarkup()}
+        ${recoveryCode ? `<div class="lobby-session">${recoveryCode}</div>` : ""}
         <div class="notice">${state.canStart ? "Ready when you are." : "Waiting for at least two named players."}</div>
         <div class="error ${errorText ? "visible" : ""}">${escapeHtml(errorText)}</div>
       </section>
@@ -1284,6 +1290,7 @@ function restoreGameScrollPositions(positions) {
 function renderGame() {
   const splashAction = activeSplashAction;
   const scrollPositions = captureGameScrollPositions();
+  const recoveryCode = recoveryNoticeMarkup();
   const title =
     state.status === "finished"
       ? "Game finished"
@@ -1296,6 +1303,7 @@ function renderGame() {
       <header class="topbar">
         <div class="room-title">
           <span class="room-code">${escapeHtml(state.code)}</span>
+          ${recoveryCode}
           <strong>Bluff UNO Table</strong>
         </div>
         <div class="turn-pill">${escapeHtml(title)}</div>
@@ -1309,7 +1317,6 @@ function renderGame() {
           ${state.you && state.you.host ? `<button id="closeRoom" class="danger" type="button" ${state.canClose ? "" : "disabled"}>Close room</button>` : ""}
         </div>
       </header>
-      ${recoveryNoticeMarkup()}
       <section class="table-layout">
         <aside class="side-panel">
           <h2 class="panel-title">Table order</h2>

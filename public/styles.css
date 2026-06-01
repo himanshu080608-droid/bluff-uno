@@ -224,18 +224,6 @@ button:disabled {
   color: #174d3e;
 }
 
-.recovery-notice {
-  min-height: 0;
-  text-align: center;
-}
-
-.game-shell > .recovery-notice {
-  margin: 0 18px 14px;
-  color: #d6f4e9;
-  background: rgba(45, 140, 111, 0.2);
-  border: 1px solid rgba(214, 244, 233, 0.16);
-}
-
 .error {
   display: none;
   background: rgba(219, 48, 68, 0.12);
@@ -278,6 +266,54 @@ button:disabled {
   padding: 8px 10px;
   font-weight: 900;
   letter-spacing: 0.12em;
+}
+
+.lobby-session {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+}
+
+.recovery-chip {
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid rgba(29, 128, 101, 0.22);
+  border-radius: 8px;
+  padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(45, 140, 111, 0.1);
+  color: #174d3e;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.recovery-chip span {
+  color: #527065;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.recovery-chip strong {
+  color: #143f34;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.topbar .recovery-chip {
+  color: #d6f4e9;
+  background: rgba(214, 244, 233, 0.1);
+  border-color: rgba(214, 244, 233, 0.18);
+}
+
+.topbar .recovery-chip span {
+  color: rgba(214, 244, 233, 0.72);
+}
+
+.topbar .recovery-chip strong {
+  color: #f2fff8;
 }
 
 .turn-pill {
