@@ -49,7 +49,7 @@ The backend reads Railway's `PORT` environment variable automatically and starts
 Add a Redis database to the same Railway project, then make sure the backend service has these variables:
 
 ```text
-CORS_ALLOW_ORIGINS=https://your-netlify-site.netlify.app,https://your-infinityfree-domain.example
+CORS_ALLOW_ORIGINS=https://bluff-uno.netlify.app
 REDIS_URL=redis://your-redis-host:6379
 REDIS_ROOM_TTL_SECONDS=7200
 KEEPALIVE_INTERVAL_SECONDS=45
@@ -57,7 +57,7 @@ KEEPALIVE_INTERVAL_SECONDS=45
 
 Railway should provide `REDIS_URL` from the Redis database. Do not set `PORT`; Railway provides it.
 
-`CORS_ALLOW_ORIGINS` can be left unset while testing because the server defaults to allowing browser requests from any origin. Set it once you know your final frontend URL.
+`CORS_ALLOW_ORIGINS` defaults to `https://bluff-uno.netlify.app`. Set it explicitly if you deploy the frontend to another domain. Do not use `*` with credentials in production.
 
 `REDIS_URL` enables room persistence. On startup, the backend loads saved rooms from Redis; after every create, join, start, leave, or player action, it saves the changed room back to Redis. Saved rooms expire after `REDIS_ROOM_TTL_SECONDS`, which defaults to 7200 seconds, or 2 hours. Closed rooms and rooms with no present players are deleted from Redis. This lets players resume from their browser-stored room code and player ID after a cold restart while avoiding stale rooms piling up forever.
 

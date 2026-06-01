@@ -27,6 +27,7 @@ REDIS_ROOM_KEY_PREFIX = os.environ.get("REDIS_ROOM_KEY_PREFIX", "bluff:room:")
 REDIS_ROOM_TTL_SECONDS = int(os.environ.get("REDIS_ROOM_TTL_SECONDS", "7200"))
 origins_env = os.environ.get("CORS_ALLOW_ORIGINS", "")
 CORS_ALLOW_ORIGINS = [origin.strip() for origin in origins_env.split(",") if origin.strip()]
+DEFAULT_CORS_ALLOW_ORIGINS = ["https://bluff-uno.netlify.app"]
 browser_keepalive_url = ""
 learned_keepalive_url = ""
 KEEPALIVE_MIN_INTERVAL_SECONDS = 30
@@ -250,7 +251,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ALLOW_ORIGINS if CORS_ALLOW_ORIGINS else ["*"],
+    allow_origins=CORS_ALLOW_ORIGINS if CORS_ALLOW_ORIGINS else DEFAULT_CORS_ALLOW_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
