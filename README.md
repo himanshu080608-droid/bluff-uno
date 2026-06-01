@@ -24,7 +24,31 @@ http://localhost:8000
 
 ## Deployment
 
-The app includes a `Dockerfile` for deployment. The container starts Uvicorn with WebSocket ping/pong enabled and serves `server:app`.
+Fly.io is the recommended deployment target for this app. The repo includes a `Dockerfile`; the container starts Uvicorn with WebSocket ping/pong enabled and serves `server:app`.
+
+Create the Fly app from the project directory:
+
+```sh
+fly launch --no-deploy
+```
+
+In the generated `fly.toml`, keep the service pointed at the Dockerfile port and disable Fly's machine autostop for the most reliable real-time game sessions:
+
+```toml
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+```
+
+Keep the app on one Machine unless room state is moved out of process memory:
+
+```sh
+fly scale count 1
+fly deploy
+```
 
 The app exposes `GET /health` for platform health checks. Browser tabs also call `/health` every 60 seconds while the page is open.
 
@@ -34,10 +58,11 @@ Optional keepalive environment variables:
 
 ```text
 KEEPALIVE_URL=https://your-app-url.example/health
-KEEPALIVE_INTERVAL_SECONDS=120
+PUBLIC_KEEPALIVE_URL=https://your-app-url.example/health
+KEEPALIVE_INTERVAL_SECONDS=45
 ```
 
-`KEEPALIVE_URL` overrides the browser-learned URL if your host supports environment variables. The keepalive loop defaults to 120 seconds and can keep an already-running container warm by making a public `/health` request every interval. If the platform has already put the container to sleep, an outside visitor or external uptime monitor still has to wake it.
+`KEEPALIVE_URL` or `PUBLIC_KEEPALIVE_URL` overrides the browser-learned URL if your host supports environment variables. The keepalive loop defaults to 45 seconds and sends one immediate ping when the browser reports the public origin. It can keep an already-running container warm by making a public `/health` request every interval. If the platform has already put the container to sleep, an outside visitor or external uptime monitor still has to wake it.
 
 Every player joins with a name. A joining player enters the room code first, then chooses the display name shown in the lobby, table order, move log, and turn banner. Any player in the lobby can start the game once at least two players are present. Share the room link or room code with other players before starting.
 

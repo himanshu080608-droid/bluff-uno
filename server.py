@@ -22,14 +22,16 @@ ROOT = Path(__file__).resolve().parent
 PUBLIC_DIR = ROOT / "public"
 browser_keepalive_url = ""
 learned_keepalive_url = ""
+KEEPALIVE_MIN_INTERVAL_SECONDS = 30
+KEEPALIVE_DEFAULT_INTERVAL_SECONDS = 45
 
 
 def keepalive_interval_seconds() -> int:
     try:
-        interval = int(os.environ.get("KEEPALIVE_INTERVAL_SECONDS", "120"))
+        interval = int(os.environ.get("KEEPALIVE_INTERVAL_SECONDS", str(KEEPALIVE_DEFAULT_INTERVAL_SECONDS)))
     except ValueError:
-        interval = 120
-    return max(60, interval)
+        interval = KEEPALIVE_DEFAULT_INTERVAL_SECONDS
+    return max(KEEPALIVE_MIN_INTERVAL_SECONDS, interval)
 
 
 def active_keepalive_url() -> str:
@@ -48,15 +50,16 @@ def remember_keepalive_url(request: Request) -> None:
     print(f"Keepalive URL learned: {learned_keepalive_url}", flush=True)
 
 
-def remember_public_keepalive_origin(origin: str | None) -> None:
+def remember_public_keepalive_origin(origin: str | None) -> bool:
     global browser_keepalive_url
     if KEEPALIVE_URL or PUBLIC_KEEPALIVE_URL or browser_keepalive_url or not origin:
-        return
+        return False
     parsed = urlparse(origin)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        return
+        return False
     browser_keepalive_url = f"{parsed.scheme}://{parsed.netloc}/health"
     print(f"Keepalive URL learned from browser: {browser_keepalive_url}", flush=True)
+    return True
 
 
 def ping_keepalive_url() -> None:
@@ -74,14 +77,22 @@ def ping_keepalive_url() -> None:
         pass
 
 
+async def send_keepalive_ping(reason: str) -> None:
+    url = active_keepalive_url()
+    if not url:
+        return
+    try:
+        await asyncio.to_thread(ping_keepalive_url)
+        print(f"Keepalive ping ok ({reason}): {url}", flush=True)
+    except Exception as error:
+        print(f"Keepalive ping failed ({reason}): {error}", flush=True)
+
+
 async def keepalive_loop() -> None:
     interval = keepalive_interval_seconds()
     while True:
         await asyncio.sleep(interval)
-        try:
-            await asyncio.to_thread(ping_keepalive_url)
-        except Exception as error:
-            print(f"Keepalive ping failed: {error}", flush=True)
+        await send_keepalive_ping("scheduled")
 
 
 @asynccontextmanager
@@ -319,7 +330,9 @@ async def player_action(body: dict = Body(default_factory=dict)):
 
 @app.post("/api/keepalive-origin")
 async def keepalive_origin(body: dict = Body(default_factory=dict)):
-    remember_public_keepalive_origin(body.get("origin"))
+    learned_from_browser = remember_public_keepalive_origin(body.get("origin"))
+    if learned_from_browser:
+        asyncio.create_task(send_keepalive_ping("browser-origin"))
     return {"ok": True, "keepaliveReady": bool(active_keepalive_url())}
 
 
