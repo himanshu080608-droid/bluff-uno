@@ -30,24 +30,23 @@ Then open `http://localhost:3000?backend=http://localhost:8000`. The backend URL
 
 Deploy the backend and frontend separately:
 
-1. Deploy the FastAPI backend to Render.
-2. Copy the Render backend URL into `public/config.js`.
-3. Deploy the `public/` folder as the static frontend on Netlify or upload it to InfinityFree.
+1. Deploy the FastAPI backend to Railway.
+2. Add a Railway Redis database and connect it to the backend.
+3. Copy the Railway backend URL into `public/config.js`.
+4. Deploy the `public/` folder as the static frontend on Netlify or upload it to InfinityFree.
 
-### Render Backend
+### Railway Backend
 
-Create a Render **Web Service** from this repository with these settings:
+Create a Railway project from this GitHub repository. Use these backend settings if Railway asks for them:
 
 ```text
-Runtime: Python
 Build Command: pip install -r requirements.txt
 Start Command: python3 server.py
-Health Check Path: /health
 ```
 
-The backend reads Render's `PORT` environment variable automatically and starts Uvicorn with WebSocket ping/pong enabled. Keep the service on one running instance unless room state is moved out of process memory.
+The backend reads Railway's `PORT` environment variable automatically and starts Uvicorn with WebSocket ping/pong enabled. Keep the service on one running instance unless room state is moved out of process memory.
 
-Optional Render environment variables:
+Add a Redis database to the same Railway project, then make sure the backend service has these variables:
 
 ```text
 CORS_ALLOW_ORIGINS=https://your-netlify-site.netlify.app,https://your-infinityfree-domain.example
@@ -55,6 +54,8 @@ REDIS_URL=redis://your-redis-host:6379
 REDIS_ROOM_TTL_SECONDS=7200
 KEEPALIVE_INTERVAL_SECONDS=45
 ```
+
+Railway should provide `REDIS_URL` from the Redis database. Do not set `PORT`; Railway provides it.
 
 `CORS_ALLOW_ORIGINS` can be left unset while testing because the server defaults to allowing browser requests from any origin. Set it once you know your final frontend URL.
 
@@ -64,12 +65,12 @@ Each player also gets a recovery code after creating or joining a room. If brows
 
 Recovery codes are unique within each room. Older saved browser sessions are not cleared automatically; if they reconnect successfully, the backend assigns any missing recovery code and the frontend saves the upgraded session.
 
-Use a persistent Redis-compatible database. On Render, create a Key Value instance in the same region as the web service and set `REDIS_URL` to its internal URL. On Railway, add a Redis database to the project and reference its `REDIS_URL` in the backend service.
+Use a persistent Redis-compatible database. On Railway, add a Redis database to the project and reference its `REDIS_URL` in the backend service.
 
-After Render deploys, copy the service URL, for example:
+After Railway deploys, copy the backend public URL, for example:
 
 ```text
-https://bluff-uno-api.onrender.com
+https://your-app.up.railway.app
 ```
 
 ### Frontend Config
@@ -77,11 +78,11 @@ https://bluff-uno-api.onrender.com
 Open `public/config.js` and set the backend URL:
 
 ```js
-window.BLUFF_BACKEND_URL = "https://bluff-uno-api.onrender.com";
-window.BLUFF_BACKEND_WS_URL = "";
+window.BLUFF_BACKEND_URL = "https://your-app.up.railway.app";
+window.BLUFF_BACKEND_WS_URL = "wss://your-app.up.railway.app";
 ```
 
-Use your actual Render URL. Do not include a trailing slash.
+Use your actual Railway URL. Do not include a trailing slash.
 
 The frontend derives WebSocket connections from that backend URL. For a deployed HTTPS backend, it connects to:
 
