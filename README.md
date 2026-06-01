@@ -24,7 +24,11 @@ http://localhost:3000
 
 ## Deployment
 
-The app exposes `GET /health` for platform health checks. When deployed behind Docker, Uvicorn is started with WebSocket ping/pong enabled.
+The app includes a `Dockerfile` for deployment. The container starts Uvicorn with WebSocket ping/pong enabled and serves `server:app`.
+
+The app exposes `GET /health` for platform health checks. Browser tabs also call `/health` every 60 seconds while the page is open.
+
+For hosts that sleep inactive containers, the browser reports its public origin to `POST /api/keepalive-origin` when the page loads. The server then uses that public origin for its background `/health` keepalive loop, so the keepalive URL can follow a changed deployment domain without hardcoding it in `server.py`.
 
 Optional keepalive environment variables:
 
@@ -33,7 +37,7 @@ KEEPALIVE_URL=https://your-app-url.example/health
 KEEPALIVE_INTERVAL_SECONDS=600
 ```
 
-`KEEPALIVE_URL` is useful on platforms that sleep containers after inactivity. It can keep an already-running container warm by making a public `/health` request every interval. If the platform has already put the container to sleep, an outside visitor or external uptime monitor still has to wake it.
+`KEEPALIVE_URL` overrides the browser-learned URL if your host supports environment variables. The keepalive loop can keep an already-running container warm by making a public `/health` request every interval. If the platform has already put the container to sleep, an outside visitor or external uptime monitor still has to wake it.
 
 Every player joins with a name. A joining player enters the room code first, then chooses the display name shown in the lobby, table order, move log, and turn banner. Any player in the lobby can start the game once at least two players are present. Share the room link or room code with other players before starting.
 
@@ -52,6 +56,7 @@ Every player joins with a name. A joining player enters the room code first, the
 - The first play into an empty center pile declares the active rank. Later players may play any physical cards as a bluff, but must keep declaring that same active rank until the pile is cleared by a bluff call or final pass.
 - On a turn, a player may play selected cards, pass, or use final pass when eligible.
 - Any player except the last player who played cards may call bluff while a last play exists, even after later passes.
+- After cards are played, bluff calls stay open for 6 seconds before the next player may play cards.
 - If the call is correct, the bluffing player takes the center pile and the next turn starts from the challenger.
 - If the call is wrong, the challenger takes the center pile and the next turn starts from the challenged player.
 - Final pass is normally offered to the last player who played cards when everyone else has passed back to them. If that last player has emptied their hand and is waiting to be ranked, final pass is offered to the next active player instead.
