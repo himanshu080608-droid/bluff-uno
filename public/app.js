@@ -763,8 +763,7 @@ function reportKeepaliveOrigin() {
 function sendPageKeepalive() {
   fetch(httpUrl("/health"), {
     method: "GET",
-    cache: "no-store",
-    headers: { "Cache-Control": "no-cache" }
+    cache: "no-store"
   }).catch(() => {
     // A missed keepalive should not interrupt gameplay or the entry screen.
   });
