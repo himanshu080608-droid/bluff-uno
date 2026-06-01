@@ -7,6 +7,7 @@ import time
 import urllib.request
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import Body, FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
@@ -16,8 +17,10 @@ import game_logic as game
 
 PORT = int(os.environ.get("PORT", "8000"))
 KEEPALIVE_URL = os.environ.get("KEEPALIVE_URL", "").strip()
+PUBLIC_KEEPALIVE_URL = os.environ.get("PUBLIC_KEEPALIVE_URL", "").strip()
 ROOT = Path(__file__).resolve().parent
 PUBLIC_DIR = ROOT / "public"
+browser_keepalive_url = ""
 learned_keepalive_url = ""
 
 
@@ -30,12 +33,12 @@ def keepalive_interval_seconds() -> int:
 
 
 def active_keepalive_url() -> str:
-    return KEEPALIVE_URL or learned_keepalive_url
+    return KEEPALIVE_URL or PUBLIC_KEEPALIVE_URL or browser_keepalive_url or learned_keepalive_url
 
 
 def remember_keepalive_url(request: Request) -> None:
     global learned_keepalive_url
-    if KEEPALIVE_URL or learned_keepalive_url:
+    if KEEPALIVE_URL or PUBLIC_KEEPALIVE_URL or learned_keepalive_url:
         return
     host = request.headers.get("x-forwarded-host") or request.headers.get("host")
     if not host:
@@ -43,6 +46,17 @@ def remember_keepalive_url(request: Request) -> None:
     proto = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
     learned_keepalive_url = f"{proto}://{host}/health"
     print(f"Keepalive URL learned: {learned_keepalive_url}", flush=True)
+
+
+def remember_public_keepalive_origin(origin: str | None) -> None:
+    global browser_keepalive_url
+    if KEEPALIVE_URL or PUBLIC_KEEPALIVE_URL or browser_keepalive_url or not origin:
+        return
+    parsed = urlparse(origin)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return
+    browser_keepalive_url = f"{parsed.scheme}://{parsed.netloc}/health"
+    print(f"Keepalive URL learned from browser: {browser_keepalive_url}", flush=True)
 
 
 def ping_keepalive_url() -> None:
@@ -301,6 +315,12 @@ async def leave_room(body: dict = Body(default_factory=dict)):
 @app.post("/api/action")
 async def player_action(body: dict = Body(default_factory=dict)):
     return await mutate_and_broadcast(lambda: handle_action(body))
+
+
+@app.post("/api/keepalive-origin")
+async def keepalive_origin(body: dict = Body(default_factory=dict)):
+    remember_public_keepalive_origin(body.get("origin"))
+    return {"ok": True, "keepaliveReady": bool(active_keepalive_url())}
 
 
 @app.websocket("/ws")

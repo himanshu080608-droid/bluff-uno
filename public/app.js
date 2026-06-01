@@ -652,8 +652,19 @@ function stopRealtimeHeartbeat() {
 
 function startPageKeepalive() {
   if (pageKeepaliveTimer) return;
+  reportKeepaliveOrigin();
   sendPageKeepalive();
   pageKeepaliveTimer = window.setInterval(sendPageKeepalive, PAGE_KEEPALIVE_MS);
+}
+
+function reportKeepaliveOrigin() {
+  fetch("/api/keepalive-origin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ origin: window.location.origin })
+  }).catch(() => {
+    // The normal page keepalive will keep retrying even if this one misses.
+  });
 }
 
 function sendPageKeepalive() {
