@@ -42,6 +42,13 @@ def random_id(bytes_count: int = 8) -> str:
     return secrets.token_hex(bytes_count)
 
 
+def recovery_code() -> str:
+    return "-".join(
+        "".join(rng.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(4))
+        for _ in range(2)
+    )
+
+
 def room_code() -> str:
     while True:
         code = "".join(rng.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(5))
@@ -57,6 +64,7 @@ def clean_name(name: str | None) -> str:
 def make_player(name: str | None, host: bool = False) -> dict:
     return {
         "id": random_id(),
+        "recoveryCode": recovery_code(),
         "name": clean_name(name),
         "host": host,
         "present": True,
@@ -339,6 +347,7 @@ def sanitize_room(room: dict, viewer_id: str | None) -> dict:
             "name": viewer["name"],
             "host": viewer["host"],
             "present": viewer.get("present", True),
+            "recoveryCode": viewer.get("recoveryCode", ""),
             "hand": [public_card(card) for card in viewer["hand"]],
         }
         if viewer

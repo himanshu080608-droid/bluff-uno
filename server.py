@@ -3,27 +3,37 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import time
 import urllib.request
 from contextlib import asynccontextmanager
-from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import Body, FastAPI, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 import game_logic as game
+
+try:
+    import redis
+except ImportError:
+    redis = None
 
 
 PORT = int(os.environ.get("PORT", "8000"))
 KEEPALIVE_URL = os.environ.get("KEEPALIVE_URL", "").strip()
 PUBLIC_KEEPALIVE_URL = os.environ.get("PUBLIC_KEEPALIVE_URL", "").strip()
-ROOT = Path(__file__).resolve().parent
-PUBLIC_DIR = ROOT / "public"
+REDIS_URL = os.environ.get("REDIS_URL", "").strip()
+REDIS_ROOM_KEY_PREFIX = os.environ.get("REDIS_ROOM_KEY_PREFIX", "bluff:room:")
+REDIS_ROOM_TTL_SECONDS = int(os.environ.get("REDIS_ROOM_TTL_SECONDS", "7200"))
+origins_env = os.environ.get("CORS_ALLOW_ORIGINS", "")
+CORS_ALLOW_ORIGINS = [origin.strip() for origin in origins_env.split(",") if origin.strip()]
 browser_keepalive_url = ""
 learned_keepalive_url = ""
 KEEPALIVE_MIN_INTERVAL_SECONDS = 30
 KEEPALIVE_DEFAULT_INTERVAL_SECONDS = 45
+redis_client = None
+redis_import_warning_printed = False
+redis_error_printed = False
 
 
 def keepalive_interval_seconds() -> int:
@@ -36,6 +46,132 @@ def keepalive_interval_seconds() -> int:
 
 def active_keepalive_url() -> str:
     return KEEPALIVE_URL or PUBLIC_KEEPALIVE_URL or browser_keepalive_url or learned_keepalive_url
+
+
+def get_redis_client():
+    global redis_client, redis_import_warning_printed
+    if not REDIS_URL:
+        return None
+    if redis is None:
+        if not redis_import_warning_printed:
+            print("Redis persistence disabled: install the redis package or remove REDIS_URL.", flush=True)
+            redis_import_warning_printed = True
+        return None
+    if redis_client is None:
+        redis_client = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
+    return redis_client
+
+
+def redis_room_key(code: str) -> str:
+    return f"{REDIS_ROOM_KEY_PREFIX}{code}"
+
+
+def normalize_recovery_code(value: str | None) -> str:
+    return "".join(character for character in str(value or "").upper() if character.isalnum())
+
+
+def recovery_code_used(room: dict, code: str, player_id: str | None = None) -> bool:
+    normalized = normalize_recovery_code(code)
+    return any(
+        normalize_recovery_code(player.get("recoveryCode")) == normalized
+        for player in room.get("players", [])
+        if player.get("id") != player_id
+    )
+
+
+def ensure_player_recovery_code(room: dict, player: dict) -> bool:
+    current = player.get("recoveryCode")
+    if current and not recovery_code_used(room, current, player.get("id")):
+        return False
+    while True:
+        candidate = game.recovery_code()
+        if not recovery_code_used(room, candidate, player.get("id")):
+            player["recoveryCode"] = candidate
+            return True
+
+
+def ensure_room_recovery_codes(room: dict) -> bool:
+    changed = False
+    seen = set()
+    for player in room.get("players", []):
+        normalized = normalize_recovery_code(player.get("recoveryCode"))
+        if not normalized or normalized in seen:
+            changed = ensure_player_recovery_code(room, player) or changed
+            normalized = normalize_recovery_code(player.get("recoveryCode"))
+        seen.add(normalized)
+    return changed
+
+
+def active_room_player_count(room: dict) -> int:
+    return sum(1 for player in room.get("players", []) if player.get("present", True))
+
+
+def should_delete_room(room: dict) -> bool:
+    return room.get("status") == "closed" or active_room_player_count(room) == 0
+
+
+def remember_redis_error(action: str, error: Exception) -> None:
+    global redis_error_printed
+    if redis_error_printed:
+        return
+    print(f"Redis persistence {action} failed: {error}", flush=True)
+    redis_error_printed = True
+
+
+def save_room(room: dict) -> None:
+    client = get_redis_client()
+    if not client:
+        return
+    try:
+        ensure_room_recovery_codes(room)
+        key = redis_room_key(room["code"])
+        if should_delete_room(room):
+            client.delete(key)
+            return
+        room["updatedAt"] = game.now_ms()
+        client.setex(key, REDIS_ROOM_TTL_SECONDS, json.dumps(room))
+    except Exception as error:
+        remember_redis_error("save", error)
+
+
+def load_persisted_rooms() -> None:
+    client = get_redis_client()
+    if not client:
+        return
+    loaded = 0
+    try:
+        for key in client.scan_iter(f"{REDIS_ROOM_KEY_PREFIX}*"):
+            raw = client.get(key)
+            if not raw:
+                continue
+            room = json.loads(raw)
+            code = str(room.get("code") or "").strip().upper()
+            if not code or not isinstance(room.get("players"), list):
+                continue
+            room["code"] = code
+            changed = ensure_room_recovery_codes(room)
+            game.rooms[code] = room
+            if changed and not should_delete_room(room):
+                room["updatedAt"] = game.now_ms()
+                client.setex(redis_room_key(code), REDIS_ROOM_TTL_SECONDS, json.dumps(room))
+            loaded += 1
+        print(f"Redis persistence loaded {loaded} room(s).", flush=True)
+    except Exception as error:
+        remember_redis_error("load", error)
+
+
+def redis_status() -> str:
+    if not REDIS_URL:
+        return "disabled"
+    client = get_redis_client()
+    if not client:
+        return "unavailable"
+    try:
+        client.ping()
+        return "connected"
+    except Exception as error:
+        remember_redis_error("ping", error)
+        return "unavailable"
 
 
 def remember_keepalive_url(request: Request) -> None:
@@ -97,6 +233,8 @@ async def keepalive_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    with game.state_lock:
+        load_persisted_rooms()
     keepalive_task = asyncio.create_task(keepalive_loop())
     try:
         yield
@@ -110,6 +248,13 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ALLOW_ORIGINS if CORS_ALLOW_ORIGINS else ["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 socket_lock = asyncio.Lock()
 room_sockets: dict[str, list[dict]] = {}
 
@@ -149,7 +294,9 @@ def new_room(name: str | None) -> tuple[dict, dict]:
         "version": 1,
         "bluffWindowUntil": 0,
         "createdAt": game.now_ms(),
+        "updatedAt": game.now_ms(),
     }
+    ensure_room_recovery_codes(room)
     game.rooms[code] = room
     game.add_log(room, "join", player["id"], f"{player['name']} created the room.")
     return room, player
@@ -172,6 +319,7 @@ def handle_join(body: dict) -> tuple[dict, str]:
         player = game.rejoin_ranked_player(room, body.get("name"))
         if not player:
             raise ValueError("This game has already started. Only players who already ranked may rejoin under their previous name.")
+        ensure_player_recovery_code(room, player)
         touch(room)
         return room, player["id"]
     if room["status"] != "lobby":
@@ -181,8 +329,33 @@ def handle_join(body: dict) -> tuple[dict, str]:
 
     player = game.make_player(body.get("name"), False)
     room["players"].append(player)
+    ensure_player_recovery_code(room, player)
     game.add_log(room, "join", player["id"], f"{player['name']} joined the room.")
     touch(room)
+    return room, player["id"]
+
+
+def handle_recover(body: dict) -> tuple[dict, str]:
+    room = require_room(body.get("code"))
+    ensure_room_recovery_codes(room)
+    recovery_code = normalize_recovery_code(body.get("recoveryCode"))
+    if not recovery_code:
+        raise ValueError("Enter a recovery code.")
+    player = next(
+        (
+            item
+            for item in room["players"]
+            if normalize_recovery_code(item.get("recoveryCode")) == recovery_code
+        ),
+        None,
+    )
+    if not player:
+        raise ValueError("Recovery code not found for this room.")
+    if not player.get("present", True):
+        player["present"] = True
+        player["leftAt"] = None
+        game.add_log(room, "rejoin", player["id"], f"{player['name']} recovered their seat.")
+        touch(room)
     return room, player["id"]
 
 
@@ -257,6 +430,7 @@ async def mutate_and_broadcast(operation) -> JSONResponse | dict:
     try:
         with game.state_lock:
             room, viewer_id = operation()
+            save_room(room)
             response = {"room": game.sanitize_room(room, viewer_id)}
             code = room["code"]
         await broadcast_room(code)
@@ -270,6 +444,7 @@ async def create_room(body: dict = Body(default_factory=dict)):
     try:
         with game.state_lock:
             room, player = new_room(body.get("name"))
+            save_room(room)
             return {"room": game.sanitize_room(room, player["id"])}
     except Exception as error:
         return api_error(error)
@@ -280,11 +455,18 @@ async def join_room(body: dict = Body(default_factory=dict)):
     return await mutate_and_broadcast(lambda: handle_join(body))
 
 
+@app.post("/api/recover")
+async def recover_room(body: dict = Body(default_factory=dict)):
+    return await mutate_and_broadcast(lambda: handle_recover(body))
+
+
 @app.post("/api/state")
 async def room_state(body: dict = Body(default_factory=dict)):
     try:
         with game.state_lock:
             room = require_room(body.get("code"))
+            if ensure_room_recovery_codes(room):
+                save_room(room)
             return {"room": game.sanitize_room(room, body.get("playerId"))}
     except Exception as error:
         return api_error(error)
@@ -347,6 +529,8 @@ async def websocket_state(websocket: WebSocket, code: str = Query(""), playerId:
             await websocket.send_json({"type": "error", "error": "Room or player not found."})
             await websocket.close(code=1008)
             return
+        if ensure_room_recovery_codes(room):
+            save_room(room)
 
     client = {"playerId": playerId, "websocket": websocket, "lock": asyncio.Lock()}
     async with socket_lock:
@@ -355,6 +539,8 @@ async def websocket_state(websocket: WebSocket, code: str = Query(""), playerId:
     try:
         with game.state_lock:
             room = require_room(code)
+            if ensure_room_recovery_codes(room):
+                save_room(room)
         await send_socket_state(client, room)
 
         while True:
@@ -368,6 +554,8 @@ async def websocket_state(websocket: WebSocket, code: str = Query(""), playerId:
             elif data.get("type") == "state":
                 with game.state_lock:
                     room = require_room(code)
+                    if ensure_room_recovery_codes(room):
+                        save_room(room)
                 await send_socket_state(client, room)
     except WebSocketDisconnect:
         pass
@@ -376,24 +564,9 @@ async def websocket_state(websocket: WebSocket, code: str = Query(""), playerId:
             room_sockets[code] = [item for item in room_sockets.get(code, []) if item is not client]
 
 
-@app.get("/")
-async def index():
-    return FileResponse(PUBLIC_DIR / "index.html")
-
-
 @app.get("/health")
 async def health():
-    return {"ok": True, "serverNow": game.now_ms(), "rooms": len(game.rooms)}
-
-
-@app.get("/{path:path}")
-async def static_file(path: str):
-    requested = (PUBLIC_DIR / path).resolve()
-    if PUBLIC_DIR not in requested.parents and requested != PUBLIC_DIR:
-        return JSONResponse({"error": "Forbidden"}, status_code=403)
-    if requested.is_file():
-        return FileResponse(requested)
-    return FileResponse(PUBLIC_DIR / "index.html")
+    return {"ok": True, "serverNow": game.now_ms(), "rooms": len(game.rooms), "redis": redis_status()}
 
 
 def run_local_server() -> None:

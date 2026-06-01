@@ -48,6 +48,93 @@ const REVERSE_INNER_WINGS_PATH = "M 8,-24 L 8,-11 M 8,11 L 8,24";
 const params = new URLSearchParams(window.location.search);
 const initialRoom = (params.get("room") || "").toUpperCase();
 let pendingJoinCode = initialRoom;
+const backendStorageKey = "bluff-uno-backend-url";
+const backendWebsocketStorageKey = "bluff-uno-backend-ws-url";
+const configuredBackendUrl = normalizeBackendUrl(window.BLUFF_BACKEND_URL || "");
+const configuredBackendWebsocketUrl = normalizeWebsocketBaseUrl(window.BLUFF_BACKEND_WS_URL || "");
+const queryBackendUrl = normalizeBackendUrl(params.get("backend") || params.get("api") || "");
+const queryBackendWebsocketUrl = normalizeWebsocketBaseUrl(params.get("ws") || "");
+const storedBackendUrl = queryBackendUrl ? "" : loadBackendUrl();
+const storedBackendWebsocketUrl = queryBackendWebsocketUrl ? "" : loadBackendWebsocketUrl();
+const backendBaseUrl = queryBackendUrl || configuredBackendUrl || storedBackendUrl;
+const backendWebsocketBaseUrl = queryBackendWebsocketUrl || configuredBackendWebsocketUrl || storedBackendWebsocketUrl;
+if (queryBackendUrl) saveBackendUrl(queryBackendUrl);
+if (queryBackendWebsocketUrl) saveBackendWebsocketUrl(queryBackendWebsocketUrl);
+
+function normalizeBackendUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+    return parsed.origin + parsed.pathname.replace(/\/+$/, "");
+  } catch {
+    return "";
+  }
+}
+
+function normalizeWebsocketBaseUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "ws:" && parsed.protocol !== "wss:") return "";
+    const path = parsed.pathname.replace(/\/+$/, "");
+    return parsed.origin + (path === "/ws" ? "" : path);
+  } catch {
+    return "";
+  }
+}
+
+function loadBackendUrl() {
+  try {
+    return normalizeBackendUrl(localStorage.getItem(backendStorageKey));
+  } catch {
+    return "";
+  }
+}
+
+function loadBackendWebsocketUrl() {
+  try {
+    return normalizeWebsocketBaseUrl(localStorage.getItem(backendWebsocketStorageKey));
+  } catch {
+    return "";
+  }
+}
+
+function saveBackendUrl(value) {
+  try {
+    localStorage.setItem(backendStorageKey, value);
+  } catch {
+  }
+}
+
+function saveBackendWebsocketUrl(value) {
+  try {
+    localStorage.setItem(backendWebsocketStorageKey, value);
+  } catch {
+  }
+}
+
+function httpUrl(path) {
+  return backendBaseUrl ? `${backendBaseUrl}${path}` : path;
+}
+
+function backendOrigin() {
+  if (!backendBaseUrl) return window.location.origin;
+  try {
+    return new URL(backendBaseUrl).origin;
+  } catch {
+    return window.location.origin;
+  }
+}
+
+function websocketUrl(path) {
+  if (backendWebsocketBaseUrl) return `${backendWebsocketBaseUrl}${path}`;
+  const url = new URL(path, backendBaseUrl || window.location.origin);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return url.toString();
+}
 
 function loadStoredSession(code) {
   if (!code) return null;
@@ -65,6 +152,7 @@ function normalizeStoredSession(stored) {
     code: String(stored.code).toUpperCase(),
     playerId: stored.playerId,
     name: stored.name || "",
+    recoveryCode: stored.recoveryCode || "",
     updatedAt: stored.updatedAt || 0
   };
 }
@@ -169,7 +257,7 @@ function clearAllStoredSessions() {
 
 function saveSession(room) {
   if (!room || !room.you) return;
-  session = { code: room.code, playerId: room.you.id, name: room.you.name, updatedAt: Date.now() };
+  session = { code: room.code, playerId: room.you.id, name: room.you.name, recoveryCode: room.you.recoveryCode || "", updatedAt: Date.now() };
   try {
     localStorage.setItem(storagePrefix + room.code, JSON.stringify(session));
     localStorage.setItem(lastSessionKey, JSON.stringify(session));
@@ -180,6 +268,11 @@ function saveSession(room) {
   const url = new URL(window.location.href);
   url.searchParams.set("room", room.code);
   window.history.replaceState({}, "", url);
+}
+
+function recoveryNoticeMarkup() {
+  if (!session || !session.recoveryCode) return "";
+  return `<div class="notice recovery-notice">Recovery code: <strong>${escapeHtml(session.recoveryCode)}</strong></div>`;
 }
 
 function colorValue(color) {
@@ -349,7 +442,7 @@ function cardCorner(card, position) {
 }
 
 async function api(path, payload) {
-  const response = await fetch(path, {
+  const response = await fetch(httpUrl(path), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
@@ -589,7 +682,7 @@ function connectEvents() {
   }
   if (!USE_EVENT_STREAM) return;
   if (!session || events) return;
-  events = new EventSource(`/events?code=${encodeURIComponent(session.code)}&playerId=${encodeURIComponent(session.playerId)}`);
+  events = new EventSource(httpUrl(`/events?code=${encodeURIComponent(session.code)}&playerId=${encodeURIComponent(session.playerId)}`));
   events.addEventListener("state", (event) => {
     applyRoomState(JSON.parse(event.data));
   });
@@ -605,9 +698,7 @@ function connectWebSocket() {
     window.clearTimeout(realtimeRetryTimer);
     realtimeRetryTimer = null;
   }
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const url = `${protocol}//${window.location.host}/ws?code=${encodeURIComponent(session.code)}&playerId=${encodeURIComponent(session.playerId)}`;
-  events = new WebSocket(url);
+  events = new WebSocket(websocketUrl(`/ws?code=${encodeURIComponent(session.code)}&playerId=${encodeURIComponent(session.playerId)}`));
 
   events.addEventListener("open", () => {
     realtimeConnected = true;
@@ -623,6 +714,8 @@ function connectWebSocket() {
         applyRoomState(message.room);
       } else if (message.type === "error" && message.error) {
         setError(message.error);
+      } else if (message.type === "pong" && Number.isFinite(message.serverNow)) {
+        serverClockOffsetMs = Date.now() - message.serverNow;
       }
     } catch {
     }
@@ -658,17 +751,17 @@ function startPageKeepalive() {
 }
 
 function reportKeepaliveOrigin() {
-  fetch("/api/keepalive-origin", {
+  fetch(httpUrl("/api/keepalive-origin"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ origin: window.location.origin })
+    body: JSON.stringify({ origin: backendOrigin() })
   }).catch(() => {
     // The normal page keepalive will keep retrying even if this one misses.
   });
 }
 
 function sendPageKeepalive() {
-  fetch("/health", {
+  fetch(httpUrl("/health"), {
     method: "GET",
     cache: "no-store",
     headers: { "Cache-Control": "no-cache" }
@@ -697,7 +790,7 @@ async function refreshState(force = false) {
   if (!session || stateRefreshInFlight || (realtimeConnected && !force)) return;
   stateRefreshInFlight = true;
   try {
-    const response = await fetch("/api/state", {
+    const response = await fetch(httpUrl("/api/state"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code: session.code, playerId: session.playerId })
@@ -824,10 +917,15 @@ function renderEntry() {
             <input id="code" class="text-input" maxlength="8" placeholder="ABCDE" value="${escapeHtml(initialRoom)}" ${hasReconnect ? "disabled" : ""}>
           </label>
           <button id="join" class="secondary" type="button" ${hasReconnect ? "disabled" : ""}>Continue to Name</button>
+          <label class="input-row">
+            <span class="field-label">Recovery code</span>
+            <input id="recoveryCode" class="text-input" maxlength="12" placeholder="ABCD-2345" ${hasReconnect ? "disabled" : ""}>
+          </label>
+          <button id="recover" class="secondary" type="button" ${hasReconnect ? "disabled" : ""}>Recover Seat</button>
           <div class="notice">${
             hasReconnect
               ? `Reconnect to ${escapeHtml(reconnectSession.code)} before creating or joining another room.`
-              : "Enter a room code first. Then choose the name everyone will see during the game."
+              : "Enter a room code to join, or use a recovery code if this browser lost its saved room."
           }</div>
           <div class="error ${errorText ? "visible" : ""}">${escapeHtml(errorText)}</div>
         </div>
@@ -871,6 +969,20 @@ function renderEntry() {
     }
   });
 
+  document.querySelector("#recover").addEventListener("click", async () => {
+    const code = document.querySelector("#code").value.trim().toUpperCase();
+    const recoveryCode = document.querySelector("#recoveryCode").value.trim().toUpperCase();
+    if (!code || !recoveryCode) {
+      setError("Enter the room code and recovery code.");
+      return;
+    }
+    try {
+      await api("/api/recover", { code, recoveryCode });
+    } catch (error) {
+      setError(error.message);
+    }
+  });
+
   const clearSessionsButton = document.querySelector("#clearSessions");
   if (clearSessionsButton) {
     clearSessionsButton.addEventListener("click", () => {
@@ -904,6 +1016,7 @@ function renderLobby() {
           <button id="leaveRoom" class="secondary" type="button" ${state.canLeave ? "" : "disabled"}>Leave Room</button>
           ${state.you && state.you.host ? `<button id="closeRoom" class="danger" type="button" ${state.canClose ? "" : "disabled"}>Close Room</button>` : ""}
         </div>
+        ${recoveryNoticeMarkup()}
         <div class="notice">${state.canStart ? "Ready when you are." : "Waiting for at least two named players."}</div>
         <div class="error ${errorText ? "visible" : ""}">${escapeHtml(errorText)}</div>
       </section>
@@ -1197,6 +1310,7 @@ function renderGame() {
           ${state.you && state.you.host ? `<button id="closeRoom" class="danger" type="button" ${state.canClose ? "" : "disabled"}>Close room</button>` : ""}
         </div>
       </header>
+      ${recoveryNoticeMarkup()}
       <section class="table-layout">
         <aside class="side-panel">
           <h2 class="panel-title">Table order</h2>

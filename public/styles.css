@@ -224,6 +224,18 @@ button:disabled {
   color: #174d3e;
 }
 
+.recovery-notice {
+  min-height: 0;
+  text-align: center;
+}
+
+.game-shell > .recovery-notice {
+  margin: 0 18px 14px;
+  color: #d6f4e9;
+  background: rgba(45, 140, 111, 0.2);
+  border: 1px solid rgba(214, 244, 233, 0.16);
+}
+
 .error {
   display: none;
   background: rgba(219, 48, 68, 0.12);
