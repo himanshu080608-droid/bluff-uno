@@ -26,9 +26,9 @@ learned_keepalive_url = ""
 
 def keepalive_interval_seconds() -> int:
     try:
-        interval = int(os.environ.get("KEEPALIVE_INTERVAL_SECONDS", "600"))
+        interval = int(os.environ.get("KEEPALIVE_INTERVAL_SECONDS", "120"))
     except ValueError:
-        interval = 600
+        interval = 120
     return max(60, interval)
 
 

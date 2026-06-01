@@ -19,7 +19,7 @@ python3 server.py
 Then open:
 
 ```text
-http://localhost:3000
+http://localhost:8000
 ```
 
 ## Deployment
@@ -34,10 +34,10 @@ Optional keepalive environment variables:
 
 ```text
 KEEPALIVE_URL=https://your-app-url.example/health
-KEEPALIVE_INTERVAL_SECONDS=600
+KEEPALIVE_INTERVAL_SECONDS=120
 ```
 
-`KEEPALIVE_URL` overrides the browser-learned URL if your host supports environment variables. The keepalive loop can keep an already-running container warm by making a public `/health` request every interval. If the platform has already put the container to sleep, an outside visitor or external uptime monitor still has to wake it.
+`KEEPALIVE_URL` overrides the browser-learned URL if your host supports environment variables. The keepalive loop defaults to 120 seconds and can keep an already-running container warm by making a public `/health` request every interval. If the platform has already put the container to sleep, an outside visitor or external uptime monitor still has to wake it.
 
 Every player joins with a name. A joining player enters the room code first, then chooses the display name shown in the lobby, table order, move log, and turn banner. Any player in the lobby can start the game once at least two players are present. Share the room link or room code with other players before starting.
 
