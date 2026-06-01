@@ -1,8 +1,5 @@
 app = "bluff-uno-game"
-primary_region = "bom"
-
-[build]
-  dockerfile = "Dockerfile"
+primary_region = "sin"
 
 [http_service]
   internal_port = 8000

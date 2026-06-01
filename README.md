@@ -24,31 +24,9 @@ http://localhost:8000
 
 ## Deployment
 
-Fly.io is the recommended deployment target for this app. The repo includes a `Dockerfile`; the container starts Uvicorn with WebSocket ping/pong enabled and serves `server:app`.
+The app includes a tracked `fly.toml` deployment config. The Python server reads the host-provided `PORT` environment variable automatically and starts Uvicorn with WebSocket ping/pong enabled.
 
-Create the Fly app from the project directory:
-
-```sh
-fly launch --no-deploy
-```
-
-In the generated `fly.toml`, keep the service pointed at the Dockerfile port and disable Fly's machine autostop for the most reliable real-time game sessions:
-
-```toml
-[http_service]
-  internal_port = 8000
-  force_https = true
-  auto_stop_machines = "off"
-  auto_start_machines = false
-  min_machines_running = 1
-```
-
-Keep the app on one Machine unless room state is moved out of process memory:
-
-```sh
-fly scale count 1
-fly deploy
-```
+Keep the app on one running instance unless room state is moved out of process memory.
 
 The app exposes `GET /health` for platform health checks. Browser tabs also call `/health` every 60 seconds while the page is open.
 
