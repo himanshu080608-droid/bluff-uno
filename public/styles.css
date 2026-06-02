@@ -167,6 +167,7 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 10px;
+  margin-top: 2px;
 }
 
 .primary,
@@ -269,9 +270,11 @@ button:disabled {
 }
 
 .lobby-session {
-  min-height: 34px;
+  min-height: 48px;
   display: flex;
   align-items: center;
+  margin-top: 12px;
+  margin-bottom: 10px;
 }
 
 .recovery-chip {
@@ -300,6 +303,30 @@ button:disabled {
   color: #143f34;
   letter-spacing: 0.08em;
   white-space: nowrap;
+}
+
+.lobby-session .recovery-chip {
+  width: 100%;
+  min-height: 48px;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 14px;
+  border-color: rgba(29, 128, 101, 0.28);
+  background: rgba(45, 140, 111, 0.12);
+}
+
+.lobby-session .recovery-chip span {
+  letter-spacing: 0.1em;
+}
+
+.lobby-session .recovery-chip strong {
+  min-height: 32px;
+  border-radius: 7px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 250, 240, 0.82);
+  border: 1px solid rgba(29, 128, 101, 0.16);
 }
 
 .topbar .recovery-chip {

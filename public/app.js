@@ -274,7 +274,7 @@ function recoveryNoticeMarkup() {
   if (!session || !session.recoveryCode) return "";
   return `
     <div class="recovery-chip" title="Recovery code">
-      <span>Recovery</span>
+      <span>Recovery Code</span>
       <strong>${escapeHtml(session.recoveryCode)}</strong>
     </div>
   `;
