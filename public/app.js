@@ -11,7 +11,6 @@ let statePollTimer = null;
 let stateRefreshInFlight = false;
 let realtimeConnected = false;
 let realtimeRetryTimer = null;
-let realtimeHeartbeatTimer = null;
 let selected = new Set();
 let errorText = "";
 let actionSplashQueue = [];
@@ -33,7 +32,6 @@ const RECEIVED_PILE_AFTER_REVEAL_GAP_MS = 180;
 const BLUFF_WINDOW_RENDER_PAD_MS = 40;
 const STATE_POLL_MS = 2500;
 const REALTIME_RETRY_MS = 1200;
-const REALTIME_HEARTBEAT_MS = 60000;
 const USE_WEB_SOCKET = true;
 const USE_EVENT_STREAM = false;
 
@@ -610,7 +608,6 @@ function connectWebSocket() {
   events.addEventListener("open", () => {
     realtimeConnected = true;
     errorText = "";
-    startRealtimeHeartbeat();
   });
 
   events.addEventListener("message", (event) => {
@@ -631,23 +628,8 @@ function connectWebSocket() {
   });
 }
 
-function startRealtimeHeartbeat() {
-  stopRealtimeHeartbeat();
-  realtimeHeartbeatTimer = window.setInterval(() => {
-    if (!events || events.readyState !== WebSocket.OPEN) return;
-    events.send(JSON.stringify({ type: "ping", at: Date.now() }));
-  }, REALTIME_HEARTBEAT_MS);
-}
-
-function stopRealtimeHeartbeat() {
-  if (!realtimeHeartbeatTimer) return;
-  window.clearInterval(realtimeHeartbeatTimer);
-  realtimeHeartbeatTimer = null;
-}
-
 function scheduleRealtimeReconnect() {
   realtimeConnected = false;
-  stopRealtimeHeartbeat();
   events = null;
   if (!session || realtimeRetryTimer) return;
   realtimeRetryTimer = window.setTimeout(() => {
@@ -1282,7 +1264,6 @@ function clearLocalSession(code) {
     window.clearTimeout(realtimeRetryTimer);
     realtimeRetryTimer = null;
   }
-  stopRealtimeHeartbeat();
   realtimeConnected = false;
   stateRefreshInFlight = false;
   removeStoredSession(code);

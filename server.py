@@ -256,9 +256,7 @@ async def websocket_state(websocket: WebSocket, code: str = Query(""), playerId:
                 data = json.loads(message)
             except json.JSONDecodeError:
                 data = {}
-            if data.get("type") == "ping":
-                await websocket.send_json({"type": "pong", "serverNow": game.now_ms()})
-            elif data.get("type") == "state":
+            if data.get("type") == "state":
                 with game.state_lock:
                     room = require_room(code)
                 await send_socket_state(client, room)
@@ -292,4 +290,4 @@ async def static_file(path: str):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("server:app", host="0.0.0.0", port=PORT, reload=False, ws_ping_interval=30, ws_ping_timeout=30)
+    uvicorn.run("server:app", host="0.0.0.0", port=PORT, reload=False)
