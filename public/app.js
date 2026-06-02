@@ -385,7 +385,7 @@ function canUseTurnActions() {
 }
 
 function canUsePassAction() {
-  return Boolean(state && state.canAct && (!isBluffWindowActive() || !state.canFinalPass));
+  return Boolean(state && state.canPass && (!isBluffWindowActive() || !state.canFinalPass));
 }
 
 function scheduleBluffWindowRender() {

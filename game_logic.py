@@ -206,6 +206,11 @@ def can_final_pass(room: dict, player_id: str | None) -> bool:
     return bool(others) and all(player["id"] in room["passedSinceLastPlay"] for player in others)
 
 
+def can_pass(room: dict, player_id: str | None) -> bool:
+    current = current_player(room)
+    return bool(room.get("lastPlay") and current and current["id"] == player_id)
+
+
 def burn_center_pile(room: dict) -> int:
     cleared = len(room["centerPile"])
     room["burnedPile"].extend(room["centerPile"])
@@ -358,6 +363,7 @@ def sanitize_room(room: dict, viewer_id: str | None) -> dict:
         "canClose": bool(viewer and viewer.get("present", True) and viewer["id"] == room["hostId"] and room["status"] in {"lobby", "playing"}),
         "canLeave": bool(viewer and viewer.get("present", True) and room["status"] in {"lobby", "playing"}),
         "canAct": bool(viewer and current and current["id"] == viewer["id"] and room["status"] == "playing"),
+        "canPass": can_pass(room, viewer_id) if viewer else False,
         "canFinalPass": can_final_pass(room, viewer_id) if viewer else False,
         "canChallenge": bool(
             viewer
@@ -592,6 +598,8 @@ def play_cards(room: dict, player: dict, card_ids: list[str], claimed_rank: str)
 
 
 def pass_turn(room: dict, player: dict) -> None:
+    if not can_pass(room, player["id"]):
+        raise ValueError("Pass is available only after cards have been played.")
     if room.get("lastPlay") and player["id"] not in room["passedSinceLastPlay"]:
         room["passedSinceLastPlay"].append(player["id"])
     add_log(room, "pass", player["id"], f"{player['name']} passed.")
