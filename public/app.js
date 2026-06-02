@@ -555,6 +555,7 @@ function trackReceivedPile(actions) {
   receivedPileCardIds.clear();
 
   const receivedIds = new Set(receivedAction.detail.receivedCardIds);
+  handScrollToEndPending = true;
   const delay = revealDuration(receivedAction) + RECEIVED_PILE_AFTER_REVEAL_GAP_MS;
   receivedPileStartTimer = window.setTimeout(() => {
     receivedPileCardIds = receivedIds;
@@ -570,16 +571,24 @@ function trackReceivedPile(actions) {
 }
 
 function scrollHandToEnd() {
+  const move = (smooth = true) => {
+    const hand = document.querySelector(".hand");
+    if (!hand) return;
+    const end = Math.max(0, hand.scrollWidth - hand.clientWidth);
+    if (!smooth) {
+      hand.scrollLeft = end;
+      return;
+    }
+    try {
+      hand.scrollTo({ left: end, behavior: "smooth" });
+    } catch {
+      hand.scrollLeft = end;
+    }
+  };
   window.requestAnimationFrame(() => {
-    window.requestAnimationFrame(() => {
-      const hand = document.querySelector(".hand");
-      if (!hand) return;
-      try {
-        hand.scrollTo({ left: hand.scrollWidth, behavior: "smooth" });
-      } catch {
-        hand.scrollLeft = hand.scrollWidth;
-      }
-    });
+    move(false);
+    window.requestAnimationFrame(() => move(true));
+    window.setTimeout(() => move(false), 180);
   });
 }
 
