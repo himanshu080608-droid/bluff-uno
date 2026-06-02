@@ -21,6 +21,7 @@ let actionSplashTimer = null;
 let receivedPileCardIds = new Set();
 let receivedPileStartTimer = null;
 let receivedPileTimer = null;
+let handScrollToEndPending = false;
 let svgIdCounter = 0;
 let serverClockOffsetMs = 0;
 let bluffWindowTimer = null;
@@ -557,9 +558,9 @@ function trackReceivedPile(actions) {
   const delay = revealDuration(receivedAction) + RECEIVED_PILE_AFTER_REVEAL_GAP_MS;
   receivedPileStartTimer = window.setTimeout(() => {
     receivedPileCardIds = receivedIds;
+    handScrollToEndPending = true;
     receivedPileStartTimer = null;
     render();
-    scrollHandToEnd();
     receivedPileTimer = window.setTimeout(() => {
       receivedPileCardIds.clear();
       receivedPileTimer = null;
@@ -570,17 +571,20 @@ function trackReceivedPile(actions) {
 
 function scrollHandToEnd() {
   window.requestAnimationFrame(() => {
-    const hand = document.querySelector(".hand");
-    if (!hand) return;
-    try {
-      hand.scrollTo({ left: hand.scrollWidth, behavior: "smooth" });
-    } catch {
-      hand.scrollLeft = hand.scrollWidth;
-    }
+    window.requestAnimationFrame(() => {
+      const hand = document.querySelector(".hand");
+      if (!hand) return;
+      try {
+        hand.scrollTo({ left: hand.scrollWidth, behavior: "smooth" });
+      } catch {
+        hand.scrollLeft = hand.scrollWidth;
+      }
+    });
   });
 }
 
 function clearReceivedPileTimer() {
+  handScrollToEndPending = false;
   if (receivedPileStartTimer) {
     window.clearTimeout(receivedPileStartTimer);
     receivedPileStartTimer = null;
@@ -1274,13 +1278,13 @@ function captureGameScrollPositions() {
   };
 }
 
-function restoreGameScrollPositions(positions) {
+function restoreGameScrollPositions(positions, options = {}) {
   window.requestAnimationFrame(() => {
     const hand = document.querySelector(".hand");
     const logs = document.querySelector(".log-list");
     const players = document.querySelector(".player-order");
     const rankings = document.querySelector(".ranking-list");
-    if (hand && positions.handLeft !== null) hand.scrollLeft = positions.handLeft;
+    if (!options.skipHand && hand && positions.handLeft !== null) hand.scrollLeft = positions.handLeft;
     if (logs && positions.logsTop !== null) logs.scrollTop = positions.logsTop;
     if (players && positions.playersTop !== null) players.scrollTop = positions.playersTop;
     if (rankings && positions.rankingsTop !== null) rankings.scrollTop = positions.rankingsTop;
@@ -1290,6 +1294,8 @@ function restoreGameScrollPositions(positions) {
 function renderGame() {
   const splashAction = activeSplashAction;
   const scrollPositions = captureGameScrollPositions();
+  const shouldScrollHandToEnd = handScrollToEndPending;
+  handScrollToEndPending = false;
   const recoveryCode = recoveryNoticeMarkup();
   const title =
     state.status === "finished"
@@ -1408,7 +1414,8 @@ function renderGame() {
   });
 
   updateSelectionControls();
-  restoreGameScrollPositions(scrollPositions);
+  restoreGameScrollPositions(scrollPositions, { skipHand: shouldScrollHandToEnd });
+  if (shouldScrollHandToEnd) scrollHandToEnd();
 }
 
 async function closeRoom() {
